@@ -36,19 +36,19 @@ type DeleteTunnelResponse struct {
 	Result CloudflareTunnel `json:"result"`
 }
 
+type GetTunneConfigResponse struct {
+	BaseResponse
+	Result struct {
+		TunnelID  string       `json:"tunnel_id"`
+		Version   int          `json:"version"`
+		Config    TunnelConfig `json:"config"`
+		Source    string       `json:"source"`
+		CreatedAt string       `json:"created_at"`
+	} `json:"result"`
+}
+
 type PutTunneConfigRequest struct {
-	Config struct {
-		Ingress []struct {
-			Hostname      string        `json:"hostname"`
-			OriginRequest OriginRequest `json:"originRequest"`
-			Path          string        `json:"path"`
-			Service       string        `json:"service"`
-		} `json:"ingress"`
-		OriginRequest OriginRequest `json:"originRequest"`
-		WarpRouting   struct {
-			Enabled bool `json:"enabled"`
-		} `json:"warpRouting"`
-	} `json:"config"`
+	Config TunnelConfig `json:"config"`
 }
 
 type Error struct {
@@ -99,6 +99,19 @@ type BaseListResponse struct {
 		Count      int `json:"Count"`
 		TotalCount int `json:"total_count"`
 	} `json:"result_info"`
+}
+
+type TunnelConfig struct {
+	Ingress []struct {
+		Hostname      string        `json:"hostname"`
+		OriginRequest OriginRequest `json:"originRequest"`
+		Path          string        `json:"path"`
+		Service       string        `json:"service"`
+	} `json:"ingress"`
+	OriginRequest OriginRequest `json:"originRequest"`
+	WarpRouting   struct {
+		Enabled bool `json:"enabled"`
+	} `json:"warpRouting"`
 }
 
 type OriginRequest struct {

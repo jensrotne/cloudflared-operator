@@ -7,12 +7,16 @@ import (
 )
 
 func main() {
-	newTunnel := cloudflare.CreateTunnel("test-api-tunnel", "cloudflare", "AQIDBAUGBwgBAgMEBQYHCAECAwQFBgcIAQIDBAUGBwg=")
+	// newTunnel := cloudflare.CreateTunnel("test-api-tunnel", "cloudflare", "AQIDBAUGBwgBAgMEBQYHCAECAwQFBgcIAQIDBAUGBwg=")
 
-	fmt.Println(newTunnel)
+	// fmt.Println(newTunnel)
 
-	deleteResponse := cloudflare.DeleteTunnel(newTunnel.Result.ID)
+	// deleteResponse := cloudflare.DeleteTunnel(newTunnel.Result.ID)
 
-	fmt.Println(deleteResponse)
+	// fmt.Println(deleteResponse)
+
+	config := cloudflare.GetTunnelConfig("6941f253-6743-4679-8d31-81e06c6ca0e0")
+
+	fmt.Println(config)
 
 }
