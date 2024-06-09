@@ -51,6 +51,11 @@ type PutTunneConfigRequest struct {
 	Config TunnelConfig `json:"config"`
 }
 
+type ListZoneRulesetsResponse struct {
+	BaseListResponse
+	Result []Ruleset `json:"result"`
+}
+
 type Error struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -133,4 +138,14 @@ type OriginRequest struct {
 	ProxyType              string `json:"proxyType"`
 	TCPKeepAlive           bool   `json:"tcpKeepAlive"`
 	TLSTimeout             int    `json:"tlsTimeout"`
+}
+
+type Ruleset struct {
+	Description string `json:"description"`
+	ID          string `json:"id"`
+	LastUpdated string `json:"last_updated"`
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Kind        string `json:"kind"`
+	Phase       string `json:"phase"`
 }

@@ -15,8 +15,11 @@ func main() {
 
 	// fmt.Println(deleteResponse)
 
-	config := cloudflare.GetTunnelConfig("6941f253-6743-4679-8d31-81e06c6ca0e0")
+	// config := cloudflare.GetTunnelConfig("6941f253-6743-4679-8d31-81e06c6ca0e0")
 
-	fmt.Println(config)
+	// fmt.Println(config)
 
+	rulesets := cloudflare.ListZoneRulesets("")
+
+	fmt.Println(rulesets)
 }
