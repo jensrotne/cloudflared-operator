@@ -14,7 +14,7 @@ var client = http.Client{
 	Timeout: 5 * time.Second,
 }
 
-func makeRequest(method string, url string, body interface{}) (*http.Response, error) {
+func makeRequest(method string, url string, body interface{}, queryParams map[string]string) (*http.Response, error) {
 	apiToken := config.Get("CF_API_TOKEN")
 
 	var req *http.Request
@@ -36,6 +36,14 @@ func makeRequest(method string, url string, body interface{}) (*http.Response, e
 
 	if err != nil {
 		panic(err)
+	}
+
+	if queryParams != nil {
+		q := req.URL.Query()
+		for key, value := range queryParams {
+			q.Add(key, value)
+		}
+		req.URL.RawQuery = q.Encode()
 	}
 
 	req.Header.Set("Content-Type", "application/json")

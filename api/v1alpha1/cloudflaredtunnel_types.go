@@ -28,14 +28,24 @@ type CloudflaredTunnelSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of CloudflaredTunnel. Edit cloudflaredtunnel_types.go to remove/update
-	TunnelName string `json:"name"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// Service to target with the Cloudflared Tunnel
+	TargetService string `json:"targetService"`
+
+	// +kubebuilder:validation:Required
+	// Service Port to target with the Cloudflared Tunnel
+	TargetPort int `json:"targetPort"`
 }
 
 // CloudflaredTunnelStatus defines the observed state of CloudflaredTunnel
 type CloudflaredTunnelStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	TunnelID string `json:"tunnelId"`
+	Message  string `json:"message"`
 }
 
 // +kubebuilder:object:root=true

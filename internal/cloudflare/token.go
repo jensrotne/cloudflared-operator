@@ -7,7 +7,7 @@ import (
 func VerifyToken() GetVerifyTokenResponse {
 	url := "https://api.cloudflare.com/client/v4/user/tokens/verify"
 
-	res, err := makeRequest("GET", url, nil)
+	res, err := makeRequest("GET", url, nil, nil)
 
 	if err != nil {
 		panic(err)

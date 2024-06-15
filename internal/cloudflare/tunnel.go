@@ -11,7 +11,7 @@ func GetTunnel(id string) GetTunnelResponse {
 
 	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/cfd_tunnel/%s", accountId, id)
 
-	res, err := makeRequest("GET", url, nil)
+	res, err := makeRequest("GET", url, nil, nil)
 
 	if err != nil {
 		panic(err)
@@ -22,12 +22,12 @@ func GetTunnel(id string) GetTunnelResponse {
 	return tunnel
 }
 
-func ListTunnels() ListTunnelsResponse {
+func ListTunnels(options map[string]string) ListTunnelsResponse {
 	accountId := config.Get("CF_ACCOUNT_ID")
 
 	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/cfd_tunnel", accountId)
 
-	res, err := makeRequest("GET", url, nil)
+	res, err := makeRequest("GET", url, nil, options)
 
 	if err != nil {
 		panic(err)
@@ -49,7 +49,7 @@ func CreateTunnel(name string, configSrc string, secret string) CreateTunnelResp
 		TunnelSecret: secret,
 	}
 
-	res, err := makeRequest("POST", url, body)
+	res, err := makeRequest("POST", url, body, nil)
 
 	if err != nil {
 		panic(err)
@@ -65,7 +65,7 @@ func DeleteTunnel(id string) DeleteTunnelResponse {
 
 	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/cfd_tunnel/%s", accountId, id)
 
-	res, err := makeRequest("DELETE", url, nil)
+	res, err := makeRequest("DELETE", url, nil, nil)
 
 	if err != nil {
 		panic(err)

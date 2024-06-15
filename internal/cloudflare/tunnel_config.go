@@ -11,7 +11,7 @@ func GetTunnelConfig(id string) GetTunneConfigResponse {
 
 	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/cfd_tunnel/%s/configurations", accountId, id)
 
-	res, err := makeRequest("GET", url, nil)
+	res, err := makeRequest("GET", url, nil, nil)
 
 	if err != nil {
 		panic(err)
@@ -31,7 +31,7 @@ func PutTunnelConfig(id string, tunnelConfig TunnelConfig) PutTunneConfigRequest
 		Config: tunnelConfig,
 	}
 
-	res, err := makeRequest("PUT", url, body)
+	res, err := makeRequest("PUT", url, body, nil)
 
 	if err != nil {
 		panic(err)

@@ -18,6 +18,9 @@ package controller
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -26,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	jensrotnecomv1alpha1 "github.com/jensrotne/cloudflared-operator/api/v1alpha1"
+	"github.com/jensrotne/cloudflared-operator/internal/cloudflare"
 )
 
 // CloudflaredTunnelReconciler reconciles a CloudflaredTunnel object
@@ -57,7 +61,49 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// TODO(user): your logic here
+	// Check if Tunnel exists in Cloudflare
+	listOptions := map[string]string{
+		"name":       tunnel.Name,
+		"is_deleted": "false",
+	}
+
+	cloudflareTunnels := cloudflare.ListTunnels(listOptions)
+
+	var cloudflareTunnel cloudflare.CloudflareTunnel
+
+	if len(cloudflareTunnels.Result) == 0 {
+		// Create Tunnel
+
+		// Generate random base64 encoded secret
+		secret := make([]byte, 32)
+		_, err := rand.Read(secret)
+		if err != nil {
+			log.Log.Error(err, "unable to generate random secret")
+			return ctrl.Result{}, err
+		}
+
+		tunnelSecret := base64.StdEncoding.EncodeToString(secret)
+
+		res := cloudflare.CreateTunnel(tunnel.Name, "cloudflare", tunnelSecret)
+
+		if res.Success {
+			cloudflareTunnel = res.Result
+		} else {
+			log.Log.Error(fmt.Errorf("unable to create tunnel"), "unable to create tunnel")
+			return ctrl.Result{}, fmt.Errorf("unable to create tunnel")
+		}
+
+	} else {
+		cloudflareTunnel = cloudflareTunnels.Result[0]
+	}
+
+	// Update status
+	tunnel.Status.TunnelID = cloudflareTunnel.ID
+
+	if err := r.Status().Update(ctx, &tunnel); err != nil {
+		log.Log.Error(err, "unable to update CloudflaredTunnel status")
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }

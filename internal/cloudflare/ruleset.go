@@ -13,7 +13,7 @@ func ListZoneRulesets(zoneId string) ListZoneRulesetsResponse {
 
 	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/rulesets", zoneId)
 
-	res, err := makeRequest("GET", url, nil)
+	res, err := makeRequest("GET", url, nil, nil)
 
 	if err != nil {
 		panic(err)

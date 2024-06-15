@@ -4,6 +4,8 @@ metadata:
   labels:
     app.kubernetes.io/name: cloudflared-operator
     app.kubernetes.io/managed-by: kustomize
-  name: cloudflaredtunnel-sample
+  name: test-tunnel
+  namespace: default
 spec:
-  name: something
+  targetService: echo-server
+  targetPort: 80
