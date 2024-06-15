@@ -50,6 +50,13 @@ type CloudflaredTunnelReconciler struct {
 func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
+	var tunnel jensrotnecomv1alpha1.CloudflaredTunnel
+
+	if err := r.Get(ctx, req.NamespacedName, &tunnel); err != nil {
+		log.Log.Error(err, "unable to fetch CloudflaredTunnel")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
 	// TODO(user): your logic here
 
 	return ctrl.Result{}, nil

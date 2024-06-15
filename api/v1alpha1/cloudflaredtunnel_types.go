@@ -29,7 +29,7 @@ type CloudflaredTunnelSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Foo is an example field of CloudflaredTunnel. Edit cloudflaredtunnel_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	TunnelName string `json:"name"`
 }
 
 // CloudflaredTunnelStatus defines the observed state of CloudflaredTunnel
