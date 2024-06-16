@@ -38,7 +38,7 @@ func ListTunnels(options map[string]string) ListTunnelsResponse {
 	return tunnels
 }
 
-func CreateTunnel(name string, configSrc string, secret string) CreateTunnelResponse {
+func CreateTunnel(name string, configSrc string, secret *string) CreateTunnelResponse {
 	accountId := config.Get("CF_ACCOUNT_ID")
 
 	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/cfd_tunnel", accountId)
@@ -74,4 +74,20 @@ func DeleteTunnel(id string) DeleteTunnelResponse {
 	tunnel := parseResponse[DeleteTunnelResponse](res)
 
 	return tunnel
+}
+
+func GetTunnelToken(id string) GetTunnelTokenResponse {
+	accountId := config.Get("CF_ACCOUNT_ID")
+
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/cfd_tunnel/%s/token", accountId, id)
+
+	res, err := makeRequest("GET", url, nil, nil)
+
+	if err != nil {
+		panic(err)
+	}
+
+	token := parseResponse[GetTunnelTokenResponse](res)
+
+	return token
 }

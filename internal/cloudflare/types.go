@@ -21,9 +21,9 @@ type ListTunnelsResponse struct {
 }
 
 type CreateTunnelRequest struct {
-	ConfigSrc    string `json:"config_src"`
-	Name         string `json:"name"`
-	TunnelSecret string `json:"tunnel_secret"`
+	ConfigSrc    string  `json:"config_src"`
+	Name         string  `json:"name"`
+	TunnelSecret *string `json:"tunnel_secret,omitempty"`
 }
 
 type CreateTunnelResponse struct {
@@ -45,6 +45,11 @@ type GetTunneConfigResponse struct {
 		Source    string       `json:"source"`
 		CreatedAt string       `json:"created_at"`
 	} `json:"result"`
+}
+
+type GetTunnelTokenResponse struct {
+	BaseResponse
+	Result string `json:"result"`
 }
 
 type PutTunneConfigRequest struct {

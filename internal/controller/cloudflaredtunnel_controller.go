@@ -18,15 +18,20 @@ package controller
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	appsv1 "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	jensrotnecomv1alpha1 "github.com/jensrotne/cloudflared-operator/api/v1alpha1"
 	"github.com/jensrotne/cloudflared-operator/internal/cloudflare"
@@ -61,7 +66,7 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Check if Tunnel exists in Cloudflare
+	// Check if Tunnel exists in Cloudflare, if not create it
 	listOptions := map[string]string{
 		"name":       tunnel.Name,
 		"is_deleted": "false",
@@ -72,22 +77,15 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	var cloudflareTunnel cloudflare.CloudflareTunnel
 
 	if len(cloudflareTunnels.Result) == 0 {
+		log.Log.Info("Tunnel not found in Cloudflare. Creating...", "tunnel", tunnel.Name)
 		// Create Tunnel
 
-		// Generate random base64 encoded secret
-		secret := make([]byte, 32)
-		_, err := rand.Read(secret)
-		if err != nil {
-			log.Log.Error(err, "unable to generate random secret")
-			return ctrl.Result{}, err
-		}
-
-		tunnelSecret := base64.StdEncoding.EncodeToString(secret)
-
-		res := cloudflare.CreateTunnel(tunnel.Name, "cloudflare", tunnelSecret)
+		res := cloudflare.CreateTunnel(tunnel.Name, "cloudflare", nil)
 
 		if res.Success {
 			cloudflareTunnel = res.Result
+
+			log.Log.Info("Tunnel created", "tunnel", cloudflareTunnel.Name)
 		} else {
 			log.Log.Error(fmt.Errorf("unable to create tunnel"), "unable to create tunnel")
 			return ctrl.Result{}, fmt.Errorf("unable to create tunnel")
@@ -95,6 +93,120 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	} else {
 		cloudflareTunnel = cloudflareTunnels.Result[0]
+	}
+
+	tunnelSecret := cloudflare.GetTunnelToken(cloudflareTunnel.ID)
+
+	if !tunnelSecret.Success {
+		log.Log.Error(fmt.Errorf("unable to get tunnel token"), "unable to get tunnel token")
+		return ctrl.Result{}, fmt.Errorf("unable to get tunnel token")
+	}
+
+	// Create Tunnel secret if not exists
+	var secret core.Secret
+
+	secretName := fmt.Sprintf("%s-tunnel-secret", tunnel.Name)
+
+	err := r.Get(ctx, client.ObjectKey{Namespace: tunnel.Namespace, Name: secretName}, &secret)
+
+	if apierrors.IsNotFound(err) {
+		log.Log.Info("Secret not found. Creating", "secret", secretName)
+
+		secret = core.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: tunnel.Namespace,
+				Annotations: map[string]string{
+					"tunnel.jensrotne.com/owner": tunnel.Name,
+				},
+			},
+			StringData: map[string]string{
+				"secret": tunnelSecret.Result,
+			},
+		}
+
+		if err := r.Create(ctx, &secret); err != nil {
+			log.Log.Error(err, "unable to create secret")
+			return ctrl.Result{}, err
+		}
+	} else {
+		if secret.StringData["secret"] != tunnelSecret.Result {
+			log.Log.Info("Secret found but secret does not match. Updating", "secret", secretName)
+
+			secret.StringData["secret"] = tunnelSecret.Result
+
+			if err := r.Update(ctx, &secret); err != nil {
+				log.Log.Error(err, "unable to update secret")
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
+	// Check if Deployment exists, if not create it
+	var deploy appsv1.Deployment
+
+	err = r.Get(ctx, client.ObjectKey{Namespace: tunnel.Namespace, Name: tunnel.Name}, &deploy)
+
+	if apierrors.IsNotFound(err) {
+		log.Log.Info("Deployment not found. Creating...", "deployment", tunnel.Name)
+
+		deploy = appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      tunnel.Name,
+				Namespace: tunnel.Namespace,
+				Annotations: map[string]string{
+					"tunnel.jensrotne.com/tunnel-id": cloudflareTunnel.ID,
+					"tunnel.jensrotne.com/owner":     tunnel.Name,
+				},
+			},
+			Spec: appsv1.DeploymentSpec{
+				Selector: &v1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": tunnel.Name,
+					},
+				},
+				Template: core.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app": tunnel.Name,
+						},
+					},
+					Spec: core.PodSpec{
+						Containers: []core.Container{
+							{
+								Name:  "cloudflared",
+								Image: "cloudflare/cloudflared:latest",
+								Command: []string{
+									"cloudflared",
+									"tunnel",
+									"run",
+								},
+								Args: []string{
+									"--token",
+									tunnelSecret.Result,
+								},
+								LivenessProbe: &core.Probe{
+									ProbeHandler: core.ProbeHandler{
+										HTTPGet: &core.HTTPGetAction{
+											Path: "/ready",
+											Port: intstr.FromInt(8080),
+										},
+									},
+									FailureThreshold:    1,
+									PeriodSeconds:       10,
+									InitialDelaySeconds: 10,
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		if err := r.Create(ctx, &deploy); err != nil {
+			log.Log.Error(err, "unable to create Deployment")
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Update status
