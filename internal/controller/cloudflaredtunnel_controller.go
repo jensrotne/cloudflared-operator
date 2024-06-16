@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -119,6 +118,14 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 				Annotations: map[string]string{
 					"tunnel.jensrotne.com/owner": tunnel.Name,
 				},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: tunnel.APIVersion,
+						Kind:       tunnel.Kind,
+						Name:       tunnel.Name,
+						UID:        tunnel.UID,
+					},
+				},
 			},
 			StringData: map[string]string{
 				"secret": tunnelSecret.Result,
@@ -158,9 +165,17 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 					"tunnel.jensrotne.com/tunnel-id": cloudflareTunnel.ID,
 					"tunnel.jensrotne.com/owner":     tunnel.Name,
 				},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: tunnel.APIVersion,
+						Kind:       tunnel.Kind,
+						Name:       tunnel.Name,
+						UID:        tunnel.UID,
+					},
+				},
 			},
 			Spec: appsv1.DeploymentSpec{
-				Selector: &v1.LabelSelector{
+				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"app": tunnel.Name,
 					},
