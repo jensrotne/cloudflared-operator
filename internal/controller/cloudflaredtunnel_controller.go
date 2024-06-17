@@ -65,140 +65,180 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Check if Tunnel exists in Cloudflare, if not create it
+	cloudflareTunnel, err := GetOrCreateTunnel(&tunnel)
+
+	if err != nil {
+		log.Log.Error(err, "unable to get or create tunnel")
+		return ctrl.Result{}, err
+	}
+
+	secret, err := GetOrCreateTunnelTokenSecret(ctx, r, &tunnel, *cloudflareTunnel)
+
+	if err != nil {
+		log.Log.Error(err, "unable to get or create tunnel token secret")
+		return ctrl.Result{}, err
+	}
+
+	_, err = GetOrCreateDeployment(ctx, r, &tunnel, *cloudflareTunnel, secret)
+
+	if err != nil {
+		log.Log.Error(err, "unable to get or create deployment")
+		return ctrl.Result{}, err
+	}
+
+	err = SetStatus(ctx, r, &tunnel, *cloudflareTunnel)
+
+	if err != nil {
+		log.Log.Error(err, "unable to set status")
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *CloudflaredTunnelReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 10}).
+		For(&jensrotnecomv1alpha1.CloudflaredTunnel{}).
+		Complete(r)
+}
+
+func GetOrCreateTunnel(t *jensrotnecomv1alpha1.CloudflaredTunnel) (*cloudflare.CloudflareTunnel, error) {
+	// Check if CRD status has tunnel ID
+	if t.Status.TunnelID != "" {
+		// Get tunnel from Cloudflare
+		getTunnelResponse, err := cloudflare.GetTunnel(t.Status.TunnelID)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if getTunnelResponse.Success {
+			return &getTunnelResponse.Result, nil
+		}
+	}
+
+	// List tunnels
 	listOptions := map[string]string{
-		"name":       tunnel.Name,
+		"name":       t.Name,
 		"is_deleted": "false",
 	}
 
-	cloudflareTunnels, err := cloudflare.ListTunnels(listOptions)
+	listTunnelsResponse, err := cloudflare.ListTunnels(listOptions)
 
 	if err != nil {
-		log.Log.Error(err, "unable to list tunnels")
-		return ctrl.Result{}, err
+		return nil, err
 	}
 
-	var cloudflareTunnel cloudflare.CloudflareTunnel
-
-	if len(cloudflareTunnels.Result) == 0 {
-		log.Log.Info("Tunnel not found in Cloudflare. Creating...", "tunnel", tunnel.Name)
-		// Create Tunnel
-
-		res, err := cloudflare.CreateTunnel(tunnel.Name, "cloudflare", nil)
+	if len(listTunnelsResponse.Result) == 0 {
+		// Create tunnel
+		createTunnelResponse, err := cloudflare.CreateTunnel(t.Name, "cloudflare", nil)
 
 		if err != nil {
-			log.Log.Error(err, "unable to create tunnel")
-			return ctrl.Result{}, err
+			return nil, err
 		}
 
-		if res.Success {
-			cloudflareTunnel = res.Result
-
-			log.Log.Info("Tunnel created", "tunnel", cloudflareTunnel.Name)
-		} else {
-			log.Log.Error(fmt.Errorf("unable to create tunnel"), "unable to create tunnel")
-			return ctrl.Result{}, fmt.Errorf("unable to create tunnel")
+		if createTunnelResponse.Success {
+			return &createTunnelResponse.Result, nil
 		}
-
-	} else {
-		cloudflareTunnel = cloudflareTunnels.Result[0]
 	}
 
-	tunnelSecret, err := cloudflareTunnel.GetTunnelToken()
+	return &listTunnelsResponse.Result[0], nil
+}
+
+func GetOrCreateTunnelTokenSecret(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel) (*core.Secret, error) {
+	// Get tunnel token
+	tunnelTokenResponse, err := tunnel.GetTunnelToken()
 
 	if err != nil {
-		log.Log.Error(err, "unable to get tunnel token")
-		return ctrl.Result{}, err
+		return nil, err
 	}
 
-	if !tunnelSecret.Success {
-		log.Log.Error(fmt.Errorf("unable to get tunnel token"), "unable to get tunnel token")
-		return ctrl.Result{}, fmt.Errorf("unable to get tunnel token")
+	if !tunnelTokenResponse.Success {
+		return nil, fmt.Errorf("unable to get tunnel token")
 	}
 
-	// Create Tunnel secret if not exists
 	var secret core.Secret
 
 	secretName := fmt.Sprintf("%s-tunnel-secret", tunnel.Name)
 
-	err = r.Get(ctx, client.ObjectKey{Namespace: tunnel.Namespace, Name: secretName}, &secret)
+	err = r.Get(ctx, client.ObjectKey{Namespace: t.Namespace, Name: secretName}, &secret)
 
 	if apierrors.IsNotFound(err) {
-		log.Log.Info("Secret not found. Creating", "secret", secretName)
-
 		secret = core.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      secretName,
-				Namespace: tunnel.Namespace,
+				Namespace: t.Namespace,
 				Annotations: map[string]string{
-					"tunnel.jensrotne.com/owner": tunnel.Name,
+					"tunnel.jensrotne.com/owner": t.Name,
 				},
 				OwnerReferences: []metav1.OwnerReference{
 					{
-						APIVersion: tunnel.APIVersion,
-						Kind:       tunnel.Kind,
-						Name:       tunnel.Name,
-						UID:        tunnel.UID,
+						APIVersion: t.APIVersion,
+						Kind:       t.Kind,
+						Name:       t.Name,
+						UID:        t.UID,
 					},
 				},
 			},
 			StringData: map[string]string{
-				"secret": tunnelSecret.Result,
+				"secret": tunnelTokenResponse.Result,
 			},
 		}
 
 		if err := r.Create(ctx, &secret); err != nil {
-			log.Log.Error(err, "unable to create secret")
-			return ctrl.Result{}, err
+			return nil, err
 		}
 	} else {
-		if secret.StringData["secret"] != tunnelSecret.Result {
-			log.Log.Info("Secret found but secret does not match. Updating", "secret", secretName)
-
-			secret.StringData["secret"] = tunnelSecret.Result
+		dataString := string(secret.Data["secret"])
+		if dataString != tunnelTokenResponse.Result {
+			secret.Data = map[string][]byte{
+				"secret": []byte(tunnelTokenResponse.Result),
+			}
 
 			if err := r.Update(ctx, &secret); err != nil {
-				log.Log.Error(err, "unable to update secret")
-				return ctrl.Result{}, err
+				return nil, err
 			}
 		}
 	}
 
-	// Check if Deployment exists, if not create it
-	var deploy appsv1.Deployment
+	return &secret, nil
+}
 
-	err = r.Get(ctx, client.ObjectKey{Namespace: tunnel.Namespace, Name: tunnel.Name}, &deploy)
+func GetOrCreateDeployment(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel, secret *core.Secret) (*appsv1.Deployment, error) {
+	var deployment appsv1.Deployment
+
+	err := r.Get(ctx, client.ObjectKey{Namespace: t.Namespace, Name: t.Name}, &deployment)
 
 	if apierrors.IsNotFound(err) {
-		log.Log.Info("Deployment not found. Creating...", "deployment", tunnel.Name)
-
-		deploy = appsv1.Deployment{
+		deployment = appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      tunnel.Name,
-				Namespace: tunnel.Namespace,
+				Name:      t.Name,
+				Namespace: t.Namespace,
 				Annotations: map[string]string{
-					"tunnel.jensrotne.com/tunnel-id": cloudflareTunnel.ID,
-					"tunnel.jensrotne.com/owner":     tunnel.Name,
+					"tunnel.jensrotne.com/tunnel-id": tunnel.ID,
+					"tunnel.jensrotne.com/owner":     t.Name,
 				},
 				OwnerReferences: []metav1.OwnerReference{
 					{
-						APIVersion: tunnel.APIVersion,
-						Kind:       tunnel.Kind,
-						Name:       tunnel.Name,
-						UID:        tunnel.UID,
+						APIVersion: t.APIVersion,
+						Kind:       t.Kind,
+						Name:       t.Name,
+						UID:        t.UID,
 					},
 				},
 			},
 			Spec: appsv1.DeploymentSpec{
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
-						"app": tunnel.Name,
+						"app": t.Name,
 					},
 				},
 				Template: core.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							"app": tunnel.Name,
+							"app": t.Name,
 						},
 					},
 					Spec: core.PodSpec{
@@ -210,10 +250,20 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 									"cloudflared",
 									"tunnel",
 									"run",
+									tunnel.ID,
 								},
-								Args: []string{
-									"--token",
-									tunnelSecret.Result,
+								Env: []core.EnvVar{
+									{
+										Name: "TUNNEL_TOKEN",
+										ValueFrom: &core.EnvVarSource{
+											SecretKeyRef: &core.SecretKeySelector{
+												LocalObjectReference: core.LocalObjectReference{
+													Name: secret.Name,
+												},
+												Key: "secret",
+											},
+										},
+									},
 								},
 								LivenessProbe: &core.Probe{
 									ProbeHandler: core.ProbeHandler{
@@ -233,27 +283,21 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			},
 		}
 
-		if err := r.Create(ctx, &deploy); err != nil {
-			log.Log.Error(err, "unable to create Deployment")
-			return ctrl.Result{}, err
+		if err := r.Create(ctx, &deployment); err != nil {
+			return nil, err
 		}
 	}
 
-	// Update status
-	tunnel.Status.TunnelID = cloudflareTunnel.ID
-
-	if err := r.Status().Update(ctx, &tunnel); err != nil {
-		log.Log.Error(err, "unable to update CloudflaredTunnel status")
-		return ctrl.Result{}, err
-	}
-
-	return ctrl.Result{}, nil
+	return &deployment, nil
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *CloudflaredTunnelReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		WithOptions(controller.Options{MaxConcurrentReconciles: 10}).
-		For(&jensrotnecomv1alpha1.CloudflaredTunnel{}).
-		Complete(r)
+func SetStatus(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel) error {
+	// Update status
+	t.Status.TunnelID = tunnel.ID
+
+	if err := r.Status().Update(ctx, t); err != nil {
+		return err
+	}
+
+	return nil
 }
