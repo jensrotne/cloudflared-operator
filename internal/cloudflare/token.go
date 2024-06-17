@@ -1,27 +1,15 @@
 package cloudflare
 
-import (
-	"encoding/json"
-)
+var tokenApiBaseUrl = "https://api.cloudflare.com/client/v4/user/tokens"
 
-func VerifyToken() GetVerifyTokenResponse {
-	url := "https://api.cloudflare.com/client/v4/user/tokens/verify"
-
-	res, err := makeRequest("GET", url, nil, nil)
+func VerifyToken() (*GetVerifyTokenResponse, error) {
+	res, err := makeRequest("GET", tokenApiBaseUrl, nil, nil)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	defer res.Body.Close()
+	tokenResponse := parseResponse[GetVerifyTokenResponse](res)
 
-	var response GetVerifyTokenResponse
-
-	err = json.NewDecoder(res.Body).Decode(&response)
-
-	if err != nil {
-		panic(err)
-	}
-
-	return response
+	return &tokenResponse, nil
 }

@@ -6,20 +6,16 @@ import (
 	"github.com/jensrotne/cloudflared-operator/internal/config"
 )
 
-func ListZoneRulesets(zoneId string) ListZoneRulesetsResponse {
-	if zoneId == "" {
-		zoneId = config.Get("CF_ZONE_ID")
-	}
+var rulesetApiBaseUrl = fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/rulesets", config.Get("CF_ZONE_ID"))
 
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/rulesets", zoneId)
-
-	res, err := makeRequest("GET", url, nil, nil)
+func ListZoneRulesets() (*ListZoneRulesetsResponse, error) {
+	res, err := makeRequest("GET", rulesetApiBaseUrl, nil, nil)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	rulesets := parseResponse[ListZoneRulesetsResponse](res)
 
-	return rulesets
+	return &rulesets, nil
 }

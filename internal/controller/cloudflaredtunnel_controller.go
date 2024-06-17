@@ -71,7 +71,12 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		"is_deleted": "false",
 	}
 
-	cloudflareTunnels := cloudflare.ListTunnels(listOptions)
+	cloudflareTunnels, err := cloudflare.ListTunnels(listOptions)
+
+	if err != nil {
+		log.Log.Error(err, "unable to list tunnels")
+		return ctrl.Result{}, err
+	}
 
 	var cloudflareTunnel cloudflare.CloudflareTunnel
 
@@ -79,7 +84,12 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		log.Log.Info("Tunnel not found in Cloudflare. Creating...", "tunnel", tunnel.Name)
 		// Create Tunnel
 
-		res := cloudflare.CreateTunnel(tunnel.Name, "cloudflare", nil)
+		res, err := cloudflare.CreateTunnel(tunnel.Name, "cloudflare", nil)
+
+		if err != nil {
+			log.Log.Error(err, "unable to create tunnel")
+			return ctrl.Result{}, err
+		}
 
 		if res.Success {
 			cloudflareTunnel = res.Result
@@ -94,7 +104,12 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		cloudflareTunnel = cloudflareTunnels.Result[0]
 	}
 
-	tunnelSecret := cloudflare.GetTunnelToken(cloudflareTunnel.ID)
+	tunnelSecret, err := cloudflareTunnel.GetTunnelToken()
+
+	if err != nil {
+		log.Log.Error(err, "unable to get tunnel token")
+		return ctrl.Result{}, err
+	}
 
 	if !tunnelSecret.Success {
 		log.Log.Error(fmt.Errorf("unable to get tunnel token"), "unable to get tunnel token")
@@ -106,7 +121,7 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	secretName := fmt.Sprintf("%s-tunnel-secret", tunnel.Name)
 
-	err := r.Get(ctx, client.ObjectKey{Namespace: tunnel.Namespace, Name: secretName}, &secret)
+	err = r.Get(ctx, client.ObjectKey{Namespace: tunnel.Namespace, Name: secretName}, &secret)
 
 	if apierrors.IsNotFound(err) {
 		log.Log.Info("Secret not found. Creating", "secret", secretName)

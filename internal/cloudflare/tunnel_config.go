@@ -2,30 +2,24 @@ package cloudflare
 
 import (
 	"fmt"
-
-	"github.com/jensrotne/cloudflared-operator/internal/config"
 )
 
-func GetTunnelConfig(id string) GetTunneConfigResponse {
-	accountId := config.Get("CF_ACCOUNT_ID")
-
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/cfd_tunnel/%s/configurations", accountId, id)
+func (t *CloudflareTunnel) GetTunnelConfig() (*GetTunneConfigResponse, error) {
+	url := fmt.Sprintf("%s/%s/configurations", tunnelApiBaseUrl, t.ID)
 
 	res, err := makeRequest("GET", url, nil, nil)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	config := parseResponse[GetTunneConfigResponse](res)
 
-	return config
+	return &config, nil
 }
 
-func PutTunnelConfig(id string, tunnelConfig TunnelConfig) PutTunneConfigRequest {
-	accountId := config.Get("CF_ACCOUNT_ID")
-
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/cfd_tunnel/%s/configurations", accountId, id)
+func (t *CloudflareTunnel) PutTunnelConfig(tunnelConfig TunnelConfig) (*PutTunneConfigRequest, error) {
+	url := fmt.Sprintf("%s/%s/configurations", tunnelApiBaseUrl, t.ID)
 
 	body := PutTunneConfigRequest{
 		Config: tunnelConfig,
@@ -34,10 +28,10 @@ func PutTunnelConfig(id string, tunnelConfig TunnelConfig) PutTunneConfigRequest
 	res, err := makeRequest("PUT", url, body, nil)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	config := parseResponse[PutTunneConfigRequest](res)
 
-	return config
+	return &config, nil
 }
