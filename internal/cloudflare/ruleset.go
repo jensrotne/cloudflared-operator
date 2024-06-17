@@ -15,7 +15,11 @@ func ListZoneRulesets() (*ListZoneRulesetsResponse, error) {
 		return nil, err
 	}
 
-	rulesets := parseResponse[ListZoneRulesetsResponse](res)
+	rulesets, err := parseResponse[ListZoneRulesetsResponse](res)
 
-	return &rulesets, nil
+	if err != nil {
+		return nil, err
+	}
+
+	return rulesets, nil
 }

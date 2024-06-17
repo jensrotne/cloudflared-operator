@@ -9,7 +9,11 @@ func VerifyToken() (*GetVerifyTokenResponse, error) {
 		return nil, err
 	}
 
-	tokenResponse := parseResponse[GetVerifyTokenResponse](res)
+	tokenResponse, err := parseResponse[GetVerifyTokenResponse](res)
 
-	return &tokenResponse, nil
+	if err != nil {
+		return nil, err
+	}
+
+	return tokenResponse, nil
 }

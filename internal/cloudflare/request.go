@@ -24,18 +24,22 @@ func makeRequest(method string, url string, body interface{}, queryParams map[st
 		b, err := json.Marshal(body)
 
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 
 		buffer := bytes.NewBuffer(b)
 
 		req, err = http.NewRequest(method, url, buffer)
+
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		req, err = http.NewRequest(method, url, nil)
 	}
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	if queryParams != nil {
@@ -54,7 +58,7 @@ func makeRequest(method string, url string, body interface{}, queryParams map[st
 	return res, err
 }
 
-func parseResponse[T interface{}](res *http.Response) T {
+func parseResponse[T interface{}](res *http.Response) (*T, error) {
 	defer res.Body.Close()
 
 	var response T
@@ -62,8 +66,8 @@ func parseResponse[T interface{}](res *http.Response) T {
 	err := json.NewDecoder(res.Body).Decode(&response)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return response
+	return &response, nil
 }

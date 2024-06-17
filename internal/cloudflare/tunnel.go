@@ -18,9 +18,13 @@ func GetTunnel(id string) (*GetTunnelResponse, error) {
 		return nil, err
 	}
 
-	tunnel := parseResponse[GetTunnelResponse](res)
+	tunnel, err := parseResponse[GetTunnelResponse](res)
 
-	return &tunnel, nil
+	if err != nil {
+		return nil, err
+	}
+
+	return tunnel, nil
 }
 
 func ListTunnels(options map[string]string) (*ListTunnelsResponse, error) {
@@ -30,9 +34,13 @@ func ListTunnels(options map[string]string) (*ListTunnelsResponse, error) {
 		return nil, err
 	}
 
-	tunnels := parseResponse[ListTunnelsResponse](res)
+	tunnels, err := parseResponse[ListTunnelsResponse](res)
 
-	return &tunnels, nil
+	if err != nil {
+		return nil, err
+	}
+
+	return tunnels, nil
 }
 
 func CreateTunnel(name string, configSrc string, secret *string) (*CreateTunnelResponse, error) {
@@ -48,9 +56,13 @@ func CreateTunnel(name string, configSrc string, secret *string) (*CreateTunnelR
 		return nil, err
 	}
 
-	tunnel := parseResponse[CreateTunnelResponse](res)
+	tunnel, err := parseResponse[CreateTunnelResponse](res)
 
-	return &tunnel, nil
+	if err != nil {
+		return nil, err
+	}
+
+	return tunnel, nil
 }
 
 func DeleteTunnel(id string) (*DeleteTunnelResponse, error) {
@@ -62,9 +74,13 @@ func DeleteTunnel(id string) (*DeleteTunnelResponse, error) {
 		return nil, err
 	}
 
-	tunnel := parseResponse[DeleteTunnelResponse](res)
+	tunnel, err := parseResponse[DeleteTunnelResponse](res)
 
-	return &tunnel, nil
+	if err != nil {
+		return nil, err
+	}
+
+	return tunnel, nil
 }
 
 func (t *CloudflareTunnel) GetTunnelToken() (*GetTunnelTokenResponse, error) {
@@ -80,7 +96,11 @@ func getTunnelToken(id string) (*GetTunnelTokenResponse, error) {
 		return nil, err
 	}
 
-	token := parseResponse[GetTunnelTokenResponse](res)
+	token, err := parseResponse[GetTunnelTokenResponse](res)
 
-	return &token, nil
+	if err != nil {
+		return nil, err
+	}
+
+	return token, nil
 }

@@ -13,9 +13,13 @@ func (t *CloudflareTunnel) GetTunnelConfig() (*GetTunneConfigResponse, error) {
 		return nil, err
 	}
 
-	config := parseResponse[GetTunneConfigResponse](res)
+	config, err := parseResponse[GetTunneConfigResponse](res)
 
-	return &config, nil
+	if err != nil {
+		return nil, err
+	}
+
+	return config, nil
 }
 
 func (t *CloudflareTunnel) PutTunnelConfig(tunnelConfig TunnelConfig) (*PutTunneConfigRequest, error) {
@@ -31,7 +35,11 @@ func (t *CloudflareTunnel) PutTunnelConfig(tunnelConfig TunnelConfig) (*PutTunne
 		return nil, err
 	}
 
-	config := parseResponse[PutTunneConfigRequest](res)
+	config, err := parseResponse[PutTunneConfigRequest](res)
 
-	return &config, nil
+	if err != nil {
+		return nil, err
+	}
+
+	return config, nil
 }
