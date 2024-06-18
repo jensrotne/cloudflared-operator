@@ -36,7 +36,18 @@ type DeleteTunnelResponse struct {
 	Result CloudflareTunnel `json:"result"`
 }
 
-type GetTunneConfigResponse struct {
+type GetTunnelConfigResponse struct {
+	BaseResponse
+	Result struct {
+		TunnelID  string        `json:"tunnel_id"`
+		Version   int           `json:"version"`
+		Config    *TunnelConfig `json:"config"`
+		Source    string        `json:"source"`
+		CreatedAt string        `json:"created_at"`
+	} `json:"result"`
+}
+
+type PutTunnelConfigResponse struct {
 	BaseResponse
 	Result struct {
 		TunnelID  string       `json:"tunnel_id"`
@@ -112,19 +123,23 @@ type BaseListResponse struct {
 }
 
 type TunnelConfig struct {
-	Ingress []struct {
-		Hostname      string        `json:"hostname"`
-		OriginRequest OriginRequest `json:"originRequest"`
-		Path          string        `json:"path"`
-		Service       string        `json:"service"`
-	} `json:"ingress"`
-	OriginRequest OriginRequest `json:"originRequest"`
-	WarpRouting   struct {
-		Enabled bool `json:"enabled"`
-	} `json:"warpRouting"`
+	Ingress       []TunnelConfigIngress      `json:"ingress"`
+	OriginRequest *TunnelConfigOriginRequest `json:"originRequest,omitempty"`
+	WarpRouting   *TunnelConfigWarpRouting   `json:"warp-routing,omitempty"`
 }
 
-type OriginRequest struct {
+type TunnelConfigWarpRouting struct {
+	Enabled bool `json:"enabled"`
+}
+
+type TunnelConfigIngress struct {
+	Hostname      *string                    `json:"hostname,omitempty"`
+	OriginRequest *TunnelConfigOriginRequest `json:"originRequest,omitempty"`
+	Path          *string                    `json:"path,omitempty"`
+	Service       string                     `json:"service"`
+}
+
+type TunnelConfigOriginRequest struct {
 	Access struct {
 		AudTag   []string `json:"audTag"`
 		Required bool     `json:"required"`

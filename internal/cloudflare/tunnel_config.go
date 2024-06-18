@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-func (t *CloudflareTunnel) GetTunnelConfig() (*GetTunneConfigResponse, error) {
+func (t *CloudflareTunnel) GetTunnelConfig() (*GetTunnelConfigResponse, error) {
 	url := fmt.Sprintf("%s/%s/configurations", tunnelApiBaseUrl, t.ID)
 
 	res, err := makeRequest("GET", url, nil, nil)
@@ -13,7 +13,7 @@ func (t *CloudflareTunnel) GetTunnelConfig() (*GetTunneConfigResponse, error) {
 		return nil, err
 	}
 
-	config, err := parseResponse[GetTunneConfigResponse](res)
+	config, err := parseResponse[GetTunnelConfigResponse](res)
 
 	if err != nil {
 		return nil, err
@@ -22,7 +22,7 @@ func (t *CloudflareTunnel) GetTunnelConfig() (*GetTunneConfigResponse, error) {
 	return config, nil
 }
 
-func (t *CloudflareTunnel) PutTunnelConfig(tunnelConfig TunnelConfig) (*PutTunneConfigRequest, error) {
+func (t *CloudflareTunnel) PutTunnelConfig(tunnelConfig TunnelConfig) (*PutTunnelConfigResponse, error) {
 	url := fmt.Sprintf("%s/%s/configurations", tunnelApiBaseUrl, t.ID)
 
 	body := PutTunneConfigRequest{
@@ -35,7 +35,7 @@ func (t *CloudflareTunnel) PutTunnelConfig(tunnelConfig TunnelConfig) (*PutTunne
 		return nil, err
 	}
 
-	config, err := parseResponse[PutTunneConfigRequest](res)
+	config, err := parseResponse[PutTunnelConfigResponse](res)
 
 	if err != nil {
 		return nil, err

@@ -72,6 +72,13 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
+	err = UpsertTunnelConfig(&tunnel, *cloudflareTunnel)
+
+	if err != nil {
+		log.Log.Error(err, "unable to upsert tunnel config")
+		return ctrl.Result{}, err
+	}
+
 	secret, err := GetOrCreateTunnelTokenSecret(ctx, r, &tunnel, *cloudflareTunnel)
 
 	if err != nil {
@@ -145,6 +152,100 @@ func GetOrCreateTunnel(t *jensrotnecomv1alpha1.CloudflaredTunnel) (*cloudflare.C
 	}
 
 	return &listTunnelsResponse.Result[0], nil
+}
+
+func UpsertTunnelConfig(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel) error {
+	var config cloudflare.TunnelConfig
+	changed := false
+
+	// Get tunnel config
+	getTunnelConfigResponse, err := tunnel.GetTunnelConfig()
+
+	if err != nil {
+		return err
+	}
+
+	if !getTunnelConfigResponse.Success {
+		return fmt.Errorf("unable to get tunnel config")
+	}
+
+	if getTunnelConfigResponse.Result.Config == nil {
+		config = cloudflare.TunnelConfig{}
+	} else {
+		config = *getTunnelConfigResponse.Result.Config
+	}
+
+	hostName := fmt.Sprintf("%s.jensrotne.com", tunnel.ID) // TODO: Make this configurable
+	service := fmt.Sprintf("http://%s:%d", t.Spec.TargetService, t.Spec.TargetPort)
+
+	if config.Ingress == nil {
+		config.Ingress = []cloudflare.TunnelConfigIngress{
+			{
+				Hostname: &hostName,
+				Service:  service,
+			},
+			{
+				Service: "http_status:404",
+			},
+		}
+
+		changed = true
+	} else {
+		if len(config.Ingress) < 2 && config.Ingress[0].Service == "http_status:404" {
+
+			// Prepend ingress
+			config.Ingress = append([]cloudflare.TunnelConfigIngress{
+				{
+					Hostname: &hostName,
+					Service:  service,
+				},
+			}, config.Ingress...)
+
+			changed = true
+		} else if len(config.Ingress) < 2 && config.Ingress[0].Service != "http_status:404" {
+			// Check if ingress is correct
+
+			if *config.Ingress[0].Hostname != hostName {
+				config.Ingress[0].Hostname = &hostName
+			}
+
+			if config.Ingress[0].Service != hostName {
+				config.Ingress[0].Service = service
+			}
+
+			config.Ingress = append(config.Ingress, cloudflare.TunnelConfigIngress{
+				Service: "http_status:404",
+			})
+
+			changed = true
+		} else {
+			// Check if ingress is correct
+			if *config.Ingress[0].Hostname != hostName {
+				config.Ingress[0].Hostname = &hostName
+				changed = true
+			}
+
+			if config.Ingress[0].Service != service {
+				config.Ingress[0].Service = service
+				changed = true
+			}
+		}
+	}
+
+	if changed {
+		// Put tunnel config
+		putTunnelConfigResponse, err := tunnel.PutTunnelConfig(config)
+
+		if err != nil {
+			return err
+		}
+
+		if !putTunnelConfigResponse.Success {
+			return fmt.Errorf("unable to put tunnel config")
+		}
+	}
+
+	return nil
 }
 
 func GetOrCreateTunnelTokenSecret(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel) (*core.Secret, error) {
