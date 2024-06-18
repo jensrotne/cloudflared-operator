@@ -346,7 +346,7 @@ func GetOrCreateDeployment(ctx context.Context, r *CloudflaredTunnelReconciler, 
 						Containers: []core.Container{
 							{
 								Name:  "cloudflared",
-								Image: "cloudflare/cloudflared:latest",
+								Image: "cloudflare/cloudflared:2024.6.1",
 								Command: []string{
 									"cloudflared",
 									"tunnel",
