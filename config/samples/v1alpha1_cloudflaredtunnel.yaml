@@ -9,3 +9,4 @@ metadata:
 spec:
   targetService: echo-server
   targetPort: 80
+  hostname: wag-platform.com

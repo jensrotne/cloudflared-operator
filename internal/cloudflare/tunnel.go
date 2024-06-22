@@ -2,12 +2,7 @@ package cloudflare
 
 import (
 	"fmt"
-
-	"github.com/jensrotne/cloudflared-operator/internal/config"
 )
-
-var accountId = config.Get("CF_ACCOUNT_ID")
-var tunnelApiBaseUrl = fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/cfd_tunnel", accountId)
 
 func GetTunnel(id string) (*GetTunnelResponse, error) {
 	url := fmt.Sprintf("%s/%s", tunnelApiBaseUrl, id)

@@ -27,6 +27,8 @@ func makeRequest(method string, url string, body interface{}, queryParams map[st
 			return nil, err
 		}
 
+		fmt.Println(string(b))
+
 		buffer := bytes.NewBuffer(b)
 
 		req, err = http.NewRequest(method, url, buffer)

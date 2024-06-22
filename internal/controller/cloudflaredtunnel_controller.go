@@ -79,6 +79,13 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
+	err = UpsertTunnelDNSRecord(&tunnel, *cloudflareTunnel)
+
+	if err != nil {
+		log.Log.Error(err, "unable to upsert tunnel DNS record")
+		return ctrl.Result{}, err
+	}
+
 	secret, err := GetOrCreateTunnelTokenSecret(ctx, r, &tunnel, *cloudflareTunnel)
 
 	if err != nil {
@@ -175,7 +182,7 @@ func UpsertTunnelConfig(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudf
 		config = *getTunnelConfigResponse.Result.Config
 	}
 
-	hostName := fmt.Sprintf("%s.jensrotne.com", tunnel.ID) // TODO: Make this configurable
+	hostName := fmt.Sprintf("%s.%s", tunnel.ID, t.Spec.HostName)
 	service := fmt.Sprintf("http://%s:%d", t.Spec.TargetService, t.Spec.TargetPort)
 
 	if config.Ingress == nil {
@@ -242,6 +249,28 @@ func UpsertTunnelConfig(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudf
 
 		if !putTunnelConfigResponse.Success {
 			return fmt.Errorf("unable to put tunnel config")
+		}
+	}
+
+	return nil
+}
+
+func UpsertTunnelDNSRecord(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel) error {
+	// Check if DNS record exists
+	exists, err := cloudflare.DNSRecordExists(fmt.Sprintf("%s.%s", tunnel.ID, t.Spec.HostName))
+
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		tunnelDNS := fmt.Sprintf("%s.cfargotunnel.com", tunnel.ID)
+
+		// Create DNS record
+		_, err := cloudflare.CreateDNSCNAMERecord(tunnel.ID, tunnelDNS)
+
+		if err != nil {
+			return err
 		}
 	}
 

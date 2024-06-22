@@ -39,6 +39,11 @@ spec:
           spec:
             description: CloudflaredTunnelSpec defines the desired state of CloudflaredTunnel
             properties:
+              hostname:
+                description: Hostname to use for the Cloudflared Tunnel
+                maxLength: 63
+                minLength: 1
+                type: string
               targetPort:
                 description: Service Port to target with the Cloudflared Tunnel
                 type: integer
@@ -48,6 +53,7 @@ spec:
                 minLength: 1
                 type: string
             required:
+            - hostname
             - targetPort
             - targetService
             type: object

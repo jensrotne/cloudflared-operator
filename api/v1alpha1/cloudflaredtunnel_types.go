@@ -37,6 +37,12 @@ type CloudflaredTunnelSpec struct {
 	// +kubebuilder:validation:Required
 	// Service Port to target with the Cloudflared Tunnel
 	TargetPort int `json:"targetPort"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// Hostname to use for the Cloudflared Tunnel
+	HostName string `json:"hostname"`
 }
 
 // CloudflaredTunnelStatus defines the observed state of CloudflaredTunnel
