@@ -44,3 +44,10 @@ type CreateDNSCNAMERecordResponse struct {
 	BaseResponse
 	Result *DNSRecord `json:"result"`
 }
+
+type DeleteDNSRecordResponse struct {
+	BaseResponse
+	Result struct {
+		ID string `json:"id"`
+	} `json:"result"`
+}

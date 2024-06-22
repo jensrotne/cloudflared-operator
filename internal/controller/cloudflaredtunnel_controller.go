@@ -257,13 +257,13 @@ func UpsertTunnelConfig(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudf
 
 func UpsertTunnelDNSRecord(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel) error {
 	// Check if DNS record exists
-	exists, err := cloudflare.DNSRecordExists(fmt.Sprintf("%s.%s", tunnel.ID, t.Spec.HostName))
+	record, err := cloudflare.GetDNSRecordIfExists(fmt.Sprintf("%s.%s", tunnel.ID, t.Spec.HostName))
 
 	if err != nil {
 		return err
 	}
 
-	if !exists {
+	if record != nil {
 		tunnelDNS := fmt.Sprintf("%s.cfargotunnel.com", tunnel.ID)
 
 		// Create DNS record
@@ -426,6 +426,58 @@ func SetStatus(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotne
 	t.Status.TunnelID = tunnel.ID
 
 	if err := r.Status().Update(ctx, t); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func CleanUpOwnedResources(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel) error {
+	// Delete deployment if it exists
+
+	var deployment appsv1.Deployment
+
+	err := r.Get(ctx, client.ObjectKey{Namespace: t.Namespace, Name: t.Name}, &deployment)
+
+	if err == nil {
+		if err := r.Delete(ctx, &deployment); err != nil {
+			return err
+		}
+	}
+
+	// Delete secret if it exists
+
+	var secret core.Secret
+
+	secretName := fmt.Sprintf("%s-tunnel-secret", tunnel.Name)
+
+	err = r.Get(ctx, client.ObjectKey{Namespace: t.Namespace, Name: secretName}, &secret)
+
+	if err == nil {
+		if err := r.Delete(ctx, &secret); err != nil {
+			return err
+		}
+	}
+
+	// Delete DNS record if it exists
+
+	record, err := cloudflare.GetDNSRecordIfExists(fmt.Sprintf("%s.%s", tunnel.ID, t.Spec.HostName))
+
+	if err != nil {
+		return err
+	}
+
+	err = cloudflare.DeleteDNSRecord(record.ID)
+
+	if err != nil {
+		return err
+	}
+
+	// Delete tunnel
+
+	_, err = cloudflare.DeleteTunnel(tunnel.ID)
+
+	if err != nil {
 		return err
 	}
 

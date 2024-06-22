@@ -2,22 +2,28 @@ package cloudflare
 
 import "fmt"
 
-func DNSRecordExists(name string) (bool, error) {
+func GetDNSRecordIfExists(name string) (*DNSRecord, error) {
 	url := fmt.Sprintf("%s?name=%s", dnsBaseApiUrl, name)
 
 	res, err := makeRequest("GET", url, nil, nil)
 
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	records, err := parseResponse[ListDNSRecordsResponse](res)
 
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	return len(records.Result) > 0, nil
+	if len(records.Result) == 0 {
+		return nil, nil
+	}
+
+	record := records.Result[0]
+
+	return &record, nil
 }
 
 func CreateDNSCNAMERecord(name string, content string) (*DNSRecord, error) {
@@ -43,4 +49,26 @@ func CreateDNSCNAMERecord(name string, content string) (*DNSRecord, error) {
 	}
 
 	return createResponse.Result, nil
+}
+
+func DeleteDNSRecord(id string) error {
+	url := fmt.Sprintf("%s/%s", dnsBaseApiUrl, id)
+
+	res, err := makeRequest("DELETE", url, nil, nil)
+
+	if err != nil {
+		return err
+	}
+
+	deleteResponse, err := parseResponse[DeleteDNSRecordResponse](res)
+
+	if err != nil {
+		return err
+	}
+
+	if deleteResponse.Success {
+		return nil
+	}
+
+	return fmt.Errorf("failed to delete DNS record with ID %s", id)
 }
