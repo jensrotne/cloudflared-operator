@@ -277,7 +277,7 @@ func UpsertTunnelDNSRecord(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel clo
 		return err
 	}
 
-	if record != nil {
+	if record == nil {
 		tunnelDNS := fmt.Sprintf("%s.cfargotunnel.com", tunnel.ID)
 
 		// Create DNS record
@@ -389,10 +389,14 @@ func GetOrCreateDeployment(ctx context.Context, r *CloudflaredTunnelReconciler, 
 						Containers: []core.Container{
 							{
 								Name:  "cloudflared",
-								Image: "cloudflare/cloudflared:2024.6.1",
+								Image: "cloudflare/cloudflared:latest",
 								Command: []string{
 									"cloudflared",
+								},
+								Args: []string{
 									"tunnel",
+									"--metrics",
+									"0.0.0.0:2000",
 									"run",
 									tunnel.ID,
 								},
@@ -413,7 +417,7 @@ func GetOrCreateDeployment(ctx context.Context, r *CloudflaredTunnelReconciler, 
 									ProbeHandler: core.ProbeHandler{
 										HTTPGet: &core.HTTPGetAction{
 											Path: "/ready",
-											Port: intstr.FromInt(8080),
+											Port: intstr.FromInt(2000),
 										},
 									},
 									FailureThreshold:    1,
