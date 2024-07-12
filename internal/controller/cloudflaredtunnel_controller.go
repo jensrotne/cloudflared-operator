@@ -25,6 +25,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -61,8 +62,21 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	var tunnel jensrotnecomv1alpha1.CloudflaredTunnel
 
 	if err := r.Get(ctx, req.NamespacedName, &tunnel); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+
 		log.Log.Error(err, "unable to fetch CloudflaredTunnel")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		return ctrl.Result{}, err
+	}
+
+	if err := r.handleFinalizer(ctx, tunnel); err != nil {
+		log.Log.Error(err, "unable to handle finalizer")
+		return ctrl.Result{}, err
+	}
+
+	if !tunnel.ObjectMeta.DeletionTimestamp.IsZero() {
+		return ctrl.Result{}, nil
 	}
 
 	cloudflareTunnel, err := GetOrCreateTunnel(&tunnel)
@@ -467,10 +481,10 @@ func CleanUpOwnedResources(ctx context.Context, r *CloudflaredTunnelReconciler, 
 		return err
 	}
 
-	err = cloudflare.DeleteDNSRecord(record.ID)
-
-	if err != nil {
-		return err
+	if record != nil {
+		if err := cloudflare.DeleteDNSRecord(record.ID); err != nil {
+			return err
+		}
 	}
 
 	// Delete tunnel
@@ -479,6 +493,30 @@ func CleanUpOwnedResources(ctx context.Context, r *CloudflaredTunnelReconciler, 
 
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (r *CloudflaredTunnelReconciler) handleFinalizer(ctx context.Context, tunnel jensrotnecomv1alpha1.CloudflaredTunnel) error {
+	finalizerName := "tunnel.jensrotne.com/finalizer"
+
+	if tunnel.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !controllerutil.ContainsFinalizer(&tunnel, finalizerName) {
+			controllerutil.AddFinalizer(&tunnel, finalizerName)
+
+			return r.Update(ctx, &tunnel)
+		}
+	} else {
+		if controllerutil.ContainsFinalizer(&tunnel, finalizerName) {
+			if err := CleanUpOwnedResources(ctx, r, &tunnel, cloudflare.CloudflareTunnel{ID: tunnel.Status.TunnelID}); err != nil {
+				return err
+			}
+
+			controllerutil.RemoveFinalizer(&tunnel, finalizerName)
+
+			return r.Update(ctx, &tunnel)
+		}
 	}
 
 	return nil
