@@ -1,73 +1,67 @@
 package cloudflare
 
-import "fmt"
+import (
+	"context"
+	"fmt"
 
-func GetDNSRecordIfExists(name string) (*DNSRecord, error) {
-	url := fmt.Sprintf("%s?name=%s", dnsBaseApiUrl, name)
+	"github.com/cloudflare/cloudflare-go"
+)
 
-	res, err := makeRequest("GET", url, nil, nil)
+func GetDNSRecordIfExists(name string) (*cloudflare.DNSRecord, error) {
+	api := getCloudflareAPI()
+
+	ctx := context.Background()
+
+	rc := getZoneRC()
+
+	records, resultInfo, err := api.ListDNSRecords(ctx, rc, cloudflare.ListDNSRecordsParams{
+		Name: name,
+	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	records, err := parseResponse[ListDNSRecordsResponse](res)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if len(records.Result) == 0 {
+	if resultInfo.Count == 0 {
 		return nil, nil
 	}
 
-	record := records.Result[0]
+	record := records[0]
 
 	return &record, nil
 }
 
-func CreateDNSCNAMERecord(name string, content string) (*DNSRecord, error) {
+func CreateDNSCNAMERecord(name string, content string) (*cloudflare.DNSRecord, error) {
+	api := getCloudflareAPI()
 	proxied := true
 
-	body := CreateDNSCNAMERecordRequest{
+	params := cloudflare.CreateDNSRecordParams{
+		Type:    "CNAME",
 		Name:    name,
 		Content: content,
-		Type:    "CNAME",
 		Proxied: &proxied,
 	}
 
-	res, err := makeRequest("POST", dnsBaseApiUrl, body, nil)
+	rc := getZoneRC()
+
+	record, err := api.CreateDNSRecord(context.Background(), rc, params)
 
 	if err != nil {
 		return nil, err
 	}
 
-	createResponse, err := parseResponse[CreateDNSCNAMERecordResponse](res)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return createResponse.Result, nil
+	return &record, nil
 }
 
 func DeleteDNSRecord(id string) error {
-	url := fmt.Sprintf("%s/%s", dnsBaseApiUrl, id)
+	api := getCloudflareAPI()
 
-	res, err := makeRequest("DELETE", url, nil, nil)
+	rc := getZoneRC()
 
-	if err != nil {
-		return err
-	}
-
-	deleteResponse, err := parseResponse[DeleteDNSRecordResponse](res)
+	err := api.DeleteDNSRecord(context.Background(), rc, id)
 
 	if err != nil {
 		return err
-	}
-
-	if deleteResponse.Success {
-		return nil
 	}
 
 	return fmt.Errorf("failed to delete DNS record with ID %s", id)
