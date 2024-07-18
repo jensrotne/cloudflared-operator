@@ -165,7 +165,7 @@ func GetOrCreateTunnel(t *jensrotnecomv1alpha1.CloudflaredTunnel) (*cloudflare.T
 
 	if len(*tunnels) == 0 {
 		// Create tunnel
-		tunnel, err = cf.CreateTunnel(t.Name, "cloudflare", nil)
+		tunnel, err = cf.CreateTunnel(t.Name)
 
 		if err != nil {
 			return nil, err

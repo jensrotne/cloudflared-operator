@@ -25,28 +25,26 @@ func ListTunnels(params cloudflare.TunnelListParams) (*[]cloudflare.Tunnel, erro
 
 	rc := getAccountRC()
 
-	tunnels, resultInfo, err := api.ListTunnels(context.Background(), rc, params)
+	tunnels, _, err := api.ListTunnels(context.Background(), rc, params)
 
 	if err != nil {
 		return nil, err
 	}
 
-	if resultInfo.Count == 0 {
-		return nil, nil
-	}
-
 	return &tunnels, nil
 }
 
-func CreateTunnel(name string, configSrc string, secret *string) (*cloudflare.Tunnel, error) {
+func CreateTunnel(name string) (*cloudflare.Tunnel, error) {
 	api := getCloudflareAPI()
 
 	rc := getAccountRC()
 
+	// Generate random base64 string
+
 	params := cloudflare.TunnelCreateParams{
 		Name:      name,
-		ConfigSrc: configSrc,
-		Secret:    *secret,
+		ConfigSrc: "cloudflare",
+		Secret:    "BgjiqCAhgcJyeQdX6mF3u59h6qqPzLZnP9iyvRSXnqg=", // Just a random string. Not being used anyways when using hosted tunnels
 	}
 
 	tunnel, err := api.CreateTunnel(context.Background(), rc, params)
