@@ -9,7 +9,8 @@ metadata:
 spec:
   targetService: echo-server
   targetPort: 80
-  hostname: wag-platform.com
+  hostname: 
+  ipAddress: '
 ---
 apiVersion: apps/v1
 kind: Deployment

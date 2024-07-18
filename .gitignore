@@ -25,3 +25,5 @@ go.work.sum
 .env
 
 bin/*
+
+config/samples/v1alpha1_cloudflaredtunnel-sensitive.yaml

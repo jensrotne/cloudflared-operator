@@ -87,7 +87,14 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	err = UpsertTunnelConfig(&tunnel, *cloudflareTunnel)
+	accessApplication, err := GetOrCreateAccessApplication(&tunnel, *cloudflareTunnel)
+
+	if err != nil {
+		log.Log.Error(err, "unable to get or create access application")
+		return ctrl.Result{}, err
+	}
+
+	err = UpsertTunnelConfig(&tunnel, *cloudflareTunnel, *accessApplication)
 
 	if err != nil {
 		log.Log.Error(err, "unable to upsert tunnel config")
@@ -115,7 +122,7 @@ func (r *CloudflaredTunnelReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	err = SetStatus(ctx, r, &tunnel, *cloudflareTunnel)
+	err = SetStatus(ctx, r, &tunnel, *cloudflareTunnel, *accessApplication)
 
 	if err != nil {
 		log.Log.Error(err, "unable to set status")
@@ -179,7 +186,45 @@ func GetOrCreateTunnel(t *jensrotnecomv1alpha1.CloudflaredTunnel) (*cloudflare.T
 	return tunnel, nil
 }
 
-func UpsertTunnelConfig(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.Tunnel) error {
+func GetOrCreateAccessApplication(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.Tunnel) (*cloudflare.AccessApplication, error) {
+	var application *cloudflare.AccessApplication
+	var err error
+
+	if t.Status.AccessApplicationID != "" {
+		application, err := cf.GetAccessApplication(t.Status.AccessApplicationID)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return application, nil
+	}
+
+	applications, err := cf.ListAccessApplications()
+
+	if err != nil {
+		return nil, err
+	}
+
+	for _, app := range *applications {
+		if app.Name == t.Name {
+			return &app, nil
+		}
+	}
+
+	domain := fmt.Sprintf("%s.%s", tunnel.ID, t.Spec.HostName)
+
+	application, err = cf.CreateAccessApplication(t.Name, domain, t.Spec.IPAddress)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return application, nil
+
+}
+
+func UpsertTunnelConfig(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.Tunnel, accessApplication cloudflare.AccessApplication) error {
 	var config *cloudflare.TunnelConfiguration
 	changed := false
 
@@ -192,6 +237,14 @@ func UpsertTunnelConfig(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudf
 
 	if config == nil {
 		config = &cloudflare.TunnelConfiguration{}
+	}
+
+	config.OriginRequest = cloudflare.OriginRequestConfig{
+		Access: &cloudflare.AccessConfig{
+			AudTag: []string{
+				accessApplication.AUD,
+			},
+		},
 	}
 
 	hostName := fmt.Sprintf("%s.%s", tunnel.ID, t.Spec.HostName)
@@ -431,9 +484,10 @@ func GetOrCreateDeployment(ctx context.Context, r *CloudflaredTunnelReconciler, 
 	return &deployment, nil
 }
 
-func SetStatus(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.Tunnel) error {
+func SetStatus(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.Tunnel, accessApplication cloudflare.AccessApplication) error {
 	// Update status
 	t.Status.TunnelID = tunnel.ID
+	t.Status.AccessApplicationID = accessApplication.ID
 
 	if err := r.Status().Update(ctx, t); err != nil {
 		return err
@@ -442,7 +496,7 @@ func SetStatus(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotne
 	return nil
 }
 
-func CleanUpOwnedResources(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.Tunnel) error {
+func CleanUpOwnedResources(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.Tunnel, accessApplication cloudflare.AccessApplication) error {
 	// Delete deployment if it exists
 
 	var deployment appsv1.Deployment
@@ -491,6 +545,14 @@ func CleanUpOwnedResources(ctx context.Context, r *CloudflaredTunnelReconciler, 
 		return err
 	}
 
+	// Delete access application
+
+	err = cf.DeleteAccessApplication(accessApplication.ID)
+
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -505,7 +567,7 @@ func (r *CloudflaredTunnelReconciler) handleFinalizer(ctx context.Context, tunne
 		}
 	} else {
 		if controllerutil.ContainsFinalizer(&tunnel, finalizerName) {
-			if err := CleanUpOwnedResources(ctx, r, &tunnel, cloudflare.Tunnel{ID: tunnel.Status.TunnelID}); err != nil {
+			if err := CleanUpOwnedResources(ctx, r, &tunnel, cloudflare.Tunnel{ID: tunnel.Status.TunnelID}, cloudflare.AccessApplication{ID: tunnel.Status.AccessApplicationID}); err != nil {
 				return err
 			}
 

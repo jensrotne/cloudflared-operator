@@ -44,6 +44,11 @@ spec:
                 maxLength: 63
                 minLength: 1
                 type: string
+              ipAddress:
+                description: IP Address to access the Cloudflared Tunnel
+                maxLength: 63
+                minLength: 1
+                type: string
               targetPort:
                 description: Service Port to target with the Cloudflared Tunnel
                 type: integer
@@ -54,17 +59,21 @@ spec:
                 type: string
             required:
             - hostname
+            - ipAddress
             - targetPort
             - targetService
             type: object
           status:
             description: CloudflaredTunnelStatus defines the observed state of CloudflaredTunnel
             properties:
+              accessApplicationId:
+                type: string
               message:
                 type: string
               tunnelId:
                 type: string
             required:
+            - accessApplicationId
             - message
             - tunnelId
             type: object

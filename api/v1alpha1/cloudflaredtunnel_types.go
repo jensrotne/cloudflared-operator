@@ -43,6 +43,12 @@ type CloudflaredTunnelSpec struct {
 	// +kubebuilder:validation:MaxLength=63
 	// Hostname to use for the Cloudflared Tunnel
 	HostName string `json:"hostname"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// IP Address to access the Cloudflared Tunnel
+	IPAddress string `json:"ipAddress"`
 }
 
 // CloudflaredTunnelStatus defines the observed state of CloudflaredTunnel
@@ -50,8 +56,9 @@ type CloudflaredTunnelStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	TunnelID string `json:"tunnelId"`
-	Message  string `json:"message"`
+	TunnelID            string `json:"tunnelId"`
+	AccessApplicationID string `json:"accessApplicationId"`
+	Message             string `json:"message"`
 }
 
 // +kubebuilder:object:root=true

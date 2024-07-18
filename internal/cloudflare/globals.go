@@ -28,5 +28,6 @@ func getZoneRC() *cloudflare.ResourceContainer {
 func getAccountRC() *cloudflare.ResourceContainer {
 	return &cloudflare.ResourceContainer{
 		Identifier: accountId,
+		Level:      cloudflare.AccountRouteLevel,
 	}
 }
