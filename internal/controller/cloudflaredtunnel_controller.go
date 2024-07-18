@@ -33,8 +33,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/cloudflare/cloudflare-go"
 	jensrotnecomv1alpha1 "github.com/jensrotne/cloudflared-operator/api/v1alpha1"
-	"github.com/jensrotne/cloudflared-operator/internal/cloudflare"
+	cf "github.com/jensrotne/cloudflared-operator/internal/cloudflare"
 )
 
 // CloudflaredTunnelReconciler reconciles a CloudflaredTunnel object
@@ -132,77 +133,74 @@ func (r *CloudflaredTunnelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func GetOrCreateTunnel(t *jensrotnecomv1alpha1.CloudflaredTunnel) (*cloudflare.CloudflareTunnel, error) {
+func GetOrCreateTunnel(t *jensrotnecomv1alpha1.CloudflaredTunnel) (*cloudflare.Tunnel, error) {
+	var tunnel *cloudflare.Tunnel
+	var err error
+
 	// Check if CRD status has tunnel ID
 	if t.Status.TunnelID != "" {
 		// Get tunnel from Cloudflare
-		getTunnelResponse, err := cloudflare.GetTunnel(t.Status.TunnelID)
+		tunnel, err := cf.GetTunnel(t.Status.TunnelID)
 
 		if err != nil {
 			return nil, err
 		}
 
-		if getTunnelResponse.Success {
-			return &getTunnelResponse.Result, nil
-		}
+		return tunnel, nil
 	}
 
 	// List tunnels
-	listOptions := map[string]string{
-		"name":       t.Name,
-		"is_deleted": "false",
+	isDeleted := false
+
+	params := cloudflare.TunnelListParams{
+		Name:      t.Name,
+		IsDeleted: &isDeleted,
 	}
 
-	listTunnelsResponse, err := cloudflare.ListTunnels(listOptions)
+	tunnels, err := cf.ListTunnels(params)
 
 	if err != nil {
 		return nil, err
 	}
 
-	if len(listTunnelsResponse.Result) == 0 {
+	if len(*tunnels) == 0 {
 		// Create tunnel
-		createTunnelResponse, err := cloudflare.CreateTunnel(t.Name, "cloudflare", nil)
+		tunnel, err = cf.CreateTunnel(t.Name, "cloudflare", nil)
 
 		if err != nil {
 			return nil, err
 		}
 
-		if createTunnelResponse.Success {
-			return &createTunnelResponse.Result, nil
-		}
+		return tunnel, nil
 	}
 
-	return &listTunnelsResponse.Result[0], nil
+	tunnel = &(*tunnels)[0]
+
+	return tunnel, nil
 }
 
-func UpsertTunnelConfig(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel) error {
-	var config cloudflare.TunnelConfig
+func UpsertTunnelConfig(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.Tunnel) error {
+	var config *cloudflare.TunnelConfiguration
 	changed := false
 
 	// Get tunnel config
-	getTunnelConfigResponse, err := tunnel.GetTunnelConfig()
+	config, err := cf.GetTunnelConfig(tunnel.ID)
 
 	if err != nil {
 		return err
 	}
 
-	if !getTunnelConfigResponse.Success {
-		return fmt.Errorf("unable to get tunnel config")
-	}
-
-	if getTunnelConfigResponse.Result.Config == nil {
-		config = cloudflare.TunnelConfig{}
-	} else {
-		config = *getTunnelConfigResponse.Result.Config
+	if config == nil {
+		config = &cloudflare.TunnelConfiguration{}
 	}
 
 	hostName := fmt.Sprintf("%s.%s", tunnel.ID, t.Spec.HostName)
 	service := fmt.Sprintf("http://%s:%d", t.Spec.TargetService, t.Spec.TargetPort)
 
 	if config.Ingress == nil {
-		config.Ingress = []cloudflare.TunnelConfigIngress{
+		config.Ingress = []cloudflare.UnvalidatedIngressRule{
 			{
-				Hostname: &hostName,
+				Hostname: hostName,
 				Service:  service,
 			},
 			{
@@ -215,9 +213,9 @@ func UpsertTunnelConfig(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudf
 		if len(config.Ingress) < 2 && config.Ingress[0].Service == "http_status:404" {
 
 			// Prepend ingress
-			config.Ingress = append([]cloudflare.TunnelConfigIngress{
+			config.Ingress = append([]cloudflare.UnvalidatedIngressRule{
 				{
-					Hostname: &hostName,
+					Hostname: hostName,
 					Service:  service,
 				},
 			}, config.Ingress...)
@@ -226,23 +224,23 @@ func UpsertTunnelConfig(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudf
 		} else if len(config.Ingress) < 2 && config.Ingress[0].Service != "http_status:404" {
 			// Check if ingress is correct
 
-			if *config.Ingress[0].Hostname != hostName {
-				config.Ingress[0].Hostname = &hostName
+			if config.Ingress[0].Hostname != hostName {
+				config.Ingress[0].Hostname = hostName
 			}
 
 			if config.Ingress[0].Service != hostName {
 				config.Ingress[0].Service = service
 			}
 
-			config.Ingress = append(config.Ingress, cloudflare.TunnelConfigIngress{
+			config.Ingress = append(config.Ingress, cloudflare.UnvalidatedIngressRule{
 				Service: "http_status:404",
 			})
 
 			changed = true
 		} else {
 			// Check if ingress is correct
-			if *config.Ingress[0].Hostname != hostName {
-				config.Ingress[0].Hostname = &hostName
+			if config.Ingress[0].Hostname != hostName {
+				config.Ingress[0].Hostname = hostName
 				changed = true
 			}
 
@@ -255,23 +253,21 @@ func UpsertTunnelConfig(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudf
 
 	if changed {
 		// Put tunnel config
-		putTunnelConfigResponse, err := tunnel.PutTunnelConfig(config)
+		_, err := cf.UpdateTunnelConfig(tunnel.ID, *config)
 
 		if err != nil {
 			return err
 		}
 
-		if !putTunnelConfigResponse.Success {
-			return fmt.Errorf("unable to put tunnel config")
-		}
+		return nil
 	}
 
 	return nil
 }
 
-func UpsertTunnelDNSRecord(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel) error {
+func UpsertTunnelDNSRecord(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.Tunnel) error {
 	// Check if DNS record exists
-	record, err := cloudflare.GetDNSRecordIfExists(fmt.Sprintf("%s.%s", tunnel.ID, t.Spec.HostName))
+	record, err := cf.GetDNSRecordIfExists(fmt.Sprintf("%s.%s", tunnel.ID, t.Spec.HostName))
 
 	if err != nil {
 		return err
@@ -281,7 +277,7 @@ func UpsertTunnelDNSRecord(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel clo
 		tunnelDNS := fmt.Sprintf("%s.cfargotunnel.com", tunnel.ID)
 
 		// Create DNS record
-		_, err := cloudflare.CreateDNSCNAMERecord(tunnel.ID, tunnelDNS)
+		_, err := cf.CreateDNSCNAMERecord(tunnel.ID, tunnelDNS)
 
 		if err != nil {
 			return err
@@ -291,16 +287,12 @@ func UpsertTunnelDNSRecord(t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel clo
 	return nil
 }
 
-func GetOrCreateTunnelTokenSecret(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel) (*core.Secret, error) {
+func GetOrCreateTunnelTokenSecret(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.Tunnel) (*core.Secret, error) {
 	// Get tunnel token
-	tunnelTokenResponse, err := tunnel.GetTunnelToken()
+	tunnelToken, err := cf.GetTunnelToken(tunnel.ID)
 
 	if err != nil {
 		return nil, err
-	}
-
-	if !tunnelTokenResponse.Success {
-		return nil, fmt.Errorf("unable to get tunnel token")
 	}
 
 	var secret core.Secret
@@ -327,7 +319,7 @@ func GetOrCreateTunnelTokenSecret(ctx context.Context, r *CloudflaredTunnelRecon
 				},
 			},
 			StringData: map[string]string{
-				"secret": tunnelTokenResponse.Result,
+				"secret": *tunnelToken,
 			},
 		}
 
@@ -336,9 +328,9 @@ func GetOrCreateTunnelTokenSecret(ctx context.Context, r *CloudflaredTunnelRecon
 		}
 	} else {
 		dataString := string(secret.Data["secret"])
-		if dataString != tunnelTokenResponse.Result {
+		if dataString != *tunnelToken {
 			secret.Data = map[string][]byte{
-				"secret": []byte(tunnelTokenResponse.Result),
+				"secret": []byte(*tunnelToken),
 			}
 
 			if err := r.Update(ctx, &secret); err != nil {
@@ -350,7 +342,7 @@ func GetOrCreateTunnelTokenSecret(ctx context.Context, r *CloudflaredTunnelRecon
 	return &secret, nil
 }
 
-func GetOrCreateDeployment(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel, secret *core.Secret) (*appsv1.Deployment, error) {
+func GetOrCreateDeployment(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.Tunnel, secret *core.Secret) (*appsv1.Deployment, error) {
 	var deployment appsv1.Deployment
 
 	err := r.Get(ctx, client.ObjectKey{Namespace: t.Namespace, Name: t.Name}, &deployment)
@@ -439,7 +431,7 @@ func GetOrCreateDeployment(ctx context.Context, r *CloudflaredTunnelReconciler, 
 	return &deployment, nil
 }
 
-func SetStatus(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel) error {
+func SetStatus(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.Tunnel) error {
 	// Update status
 	t.Status.TunnelID = tunnel.ID
 
@@ -450,7 +442,7 @@ func SetStatus(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotne
 	return nil
 }
 
-func CleanUpOwnedResources(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.CloudflareTunnel) error {
+func CleanUpOwnedResources(ctx context.Context, r *CloudflaredTunnelReconciler, t *jensrotnecomv1alpha1.CloudflaredTunnel, tunnel cloudflare.Tunnel) error {
 	// Delete deployment if it exists
 
 	var deployment appsv1.Deployment
@@ -479,21 +471,21 @@ func CleanUpOwnedResources(ctx context.Context, r *CloudflaredTunnelReconciler, 
 
 	// Delete DNS record if it exists
 
-	record, err := cloudflare.GetDNSRecordIfExists(fmt.Sprintf("%s.%s", tunnel.ID, t.Spec.HostName))
+	record, err := cf.GetDNSRecordIfExists(fmt.Sprintf("%s.%s", tunnel.ID, t.Spec.HostName))
 
 	if err != nil {
 		return err
 	}
 
 	if record != nil {
-		if err := cloudflare.DeleteDNSRecord(record.ID); err != nil {
+		if err := cf.DeleteDNSRecord(record.ID); err != nil {
 			return err
 		}
 	}
 
 	// Delete tunnel
 
-	_, err = cloudflare.DeleteTunnel(tunnel.ID)
+	err = cf.DeleteTunnel(tunnel.ID)
 
 	if err != nil {
 		return err
@@ -513,7 +505,7 @@ func (r *CloudflaredTunnelReconciler) handleFinalizer(ctx context.Context, tunne
 		}
 	} else {
 		if controllerutil.ContainsFinalizer(&tunnel, finalizerName) {
-			if err := CleanUpOwnedResources(ctx, r, &tunnel, cloudflare.CloudflareTunnel{ID: tunnel.Status.TunnelID}); err != nil {
+			if err := CleanUpOwnedResources(ctx, r, &tunnel, cloudflare.Tunnel{ID: tunnel.Status.TunnelID}); err != nil {
 				return err
 			}
 

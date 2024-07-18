@@ -1,45 +1,40 @@
 package cloudflare
 
 import (
-	"fmt"
+	"context"
+
+	"github.com/cloudflare/cloudflare-go"
 )
 
-func (t *CloudflareTunnel) GetTunnelConfig() (*GetTunnelConfigResponse, error) {
-	url := fmt.Sprintf("%s/%s/configurations", tunnelApiBaseUrl, t.ID)
+func GetTunnelConfig(id string) (*cloudflare.TunnelConfiguration, error) {
+	api := getCloudflareAPI()
 
-	res, err := makeRequest("GET", url, nil, nil)
+	rc := getAccountRC()
 
-	if err != nil {
-		return nil, err
-	}
-
-	config, err := parseResponse[GetTunnelConfigResponse](res)
+	res, err := api.GetTunnelConfiguration(context.Background(), rc, id)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return config, nil
+	return &res.Config, nil
 }
 
-func (t *CloudflareTunnel) PutTunnelConfig(tunnelConfig TunnelConfig) (*PutTunnelConfigResponse, error) {
-	url := fmt.Sprintf("%s/%s/configurations", tunnelApiBaseUrl, t.ID)
+func UpdateTunnelConfig(id string, config cloudflare.TunnelConfiguration) (*cloudflare.TunnelConfiguration, error) {
+	api := getCloudflareAPI()
 
-	body := PutTunneConfigRequest{
-		Config: tunnelConfig,
+	rc := getAccountRC()
+
+	params := cloudflare.TunnelConfigurationParams{
+		TunnelID: id,
+		Config:   config,
 	}
 
-	res, err := makeRequest("PUT", url, body, nil)
+	res, err := api.UpdateTunnelConfiguration(context.Background(), rc, params)
 
 	if err != nil {
 		return nil, err
 	}
 
-	config, err := parseResponse[PutTunnelConfigResponse](res)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return config, nil
+	return &res.Config, nil
 }

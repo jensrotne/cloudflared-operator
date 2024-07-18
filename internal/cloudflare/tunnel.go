@@ -1,101 +1,87 @@
 package cloudflare
 
 import (
-	"fmt"
+	"context"
+
+	"github.com/cloudflare/cloudflare-go"
 )
 
-func GetTunnel(id string) (*GetTunnelResponse, error) {
-	url := fmt.Sprintf("%s/%s", tunnelApiBaseUrl, id)
+func GetTunnel(id string) (*cloudflare.Tunnel, error) {
+	api := getCloudflareAPI()
 
-	res, err := makeRequest("GET", url, nil, nil)
+	rc := getAccountRC()
 
-	if err != nil {
-		return nil, err
-	}
-
-	tunnel, err := parseResponse[GetTunnelResponse](res)
+	tunnel, err := api.GetTunnel(context.Background(), rc, id)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return tunnel, nil
+	return &tunnel, nil
 }
 
-func ListTunnels(options map[string]string) (*ListTunnelsResponse, error) {
-	res, err := makeRequest("GET", tunnelApiBaseUrl, nil, options)
+func ListTunnels(params cloudflare.TunnelListParams) (*[]cloudflare.Tunnel, error) {
+	api := getCloudflareAPI()
+
+	rc := getAccountRC()
+
+	tunnels, resultInfo, err := api.ListTunnels(context.Background(), rc, params)
 
 	if err != nil {
 		return nil, err
 	}
 
-	tunnels, err := parseResponse[ListTunnelsResponse](res)
-
-	if err != nil {
-		return nil, err
+	if resultInfo.Count == 0 {
+		return nil, nil
 	}
 
-	return tunnels, nil
+	return &tunnels, nil
 }
 
-func CreateTunnel(name string, configSrc string, secret *string) (*CreateTunnelResponse, error) {
-	body := CreateTunnelRequest{
-		Name:         name,
-		ConfigSrc:    configSrc,
-		TunnelSecret: secret,
+func CreateTunnel(name string, configSrc string, secret *string) (*cloudflare.Tunnel, error) {
+	api := getCloudflareAPI()
+
+	rc := getAccountRC()
+
+	params := cloudflare.TunnelCreateParams{
+		Name:      name,
+		ConfigSrc: configSrc,
+		Secret:    *secret,
 	}
 
-	res, err := makeRequest("POST", tunnelApiBaseUrl, body, nil)
+	tunnel, err := api.CreateTunnel(context.Background(), rc, params)
 
 	if err != nil {
 		return nil, err
 	}
 
-	tunnel, err := parseResponse[CreateTunnelResponse](res)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return tunnel, nil
+	return &tunnel, nil
 }
 
-func DeleteTunnel(id string) (*DeleteTunnelResponse, error) {
-	url := fmt.Sprintf("%s/%s", tunnelApiBaseUrl, id)
+func DeleteTunnel(id string) error {
+	api := getCloudflareAPI()
 
-	res, err := makeRequest("DELETE", url, nil, nil)
+	rc := getAccountRC()
 
-	if err != nil {
-		return nil, err
-	}
-
-	tunnel, err := parseResponse[DeleteTunnelResponse](res)
+	err := api.DeleteTunnel(context.Background(), rc, id)
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return tunnel, nil
+	return nil
 }
 
-func (t *CloudflareTunnel) GetTunnelToken() (*GetTunnelTokenResponse, error) {
-	return getTunnelToken(t.ID)
-}
+func GetTunnelToken(id string) (*string, error) {
+	api := getCloudflareAPI()
 
-func getTunnelToken(id string) (*GetTunnelTokenResponse, error) {
-	url := fmt.Sprintf("%s/%s/token", tunnelApiBaseUrl, id)
+	rc := getAccountRC()
 
-	res, err := makeRequest("GET", url, nil, nil)
+	token, err := api.GetTunnelToken(context.Background(), rc, id)
 
 	if err != nil {
 		return nil, err
 	}
 
-	token, err := parseResponse[GetTunnelTokenResponse](res)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return token, nil
+	return &token, nil
 }

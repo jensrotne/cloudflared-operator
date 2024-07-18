@@ -2,7 +2,6 @@ package cloudflare
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cloudflare/cloudflare-go"
 )
@@ -64,5 +63,5 @@ func DeleteDNSRecord(id string) error {
 		return err
 	}
 
-	return fmt.Errorf("failed to delete DNS record with ID %s", id)
+	return nil
 }
